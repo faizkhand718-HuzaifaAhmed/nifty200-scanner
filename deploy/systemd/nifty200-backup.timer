@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily NIFTY 200 Opportunity Scanner database backup
+
+[Timer]
+# 20:30 UTC = 02:00 IST, after market close
+OnCalendar=*-*-* 20:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIFTY 200 Opportunity Scanner — Preview</title>
+<style>
+  :root {
+    --bg: #0A0D12;
+    --surface: #12161D;
+    --surface-2: #171C24;
+    --border: #232935;
+    --text: #E6E9EE;
+    --text-dim: #8B93A1;
+    --text-faint: #5B6270;
+    --long: #3DD68C;
+    --long-dim: #1D5C43;
+    --short: #F0596B;
+    --short-dim: #6B2530;
+    --watch: #E8B339;
+    --watch-dim: #6B551E;
+    --accent: #4C8DFF;
+    --mono: 'SF Mono', 'Consolas', 'Menlo', 'Liberation Mono', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .pos { color: var(--long); }
+  .neg { color: var(--short); }
+
+  header.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 4px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  header.topbar .brand { font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
+  header.topbar .brand span { color: var(--text-dim); font-weight: 400; margin-left: 8px; font-size: 12px; }
+  header.topbar .clock { font-family: var(--mono); color: var(--text-dim); font-size: 12px; }
+
+  /* ---- Market status bar ---- */
+  .status-bar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .status-cell {
+    background: var(--surface);
+    padding: 10px 14px;
+  }
+  .status-cell .label { font-size: 11px; color: var(--text-faint); margin-bottom: 4px; }
+  .status-cell .value { font-size: 15px; font-weight: 500; }
+  .status-cell .value.num { font-size: 16px; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .pill.long { background: rgba(61,214,140,0.12); color: var(--long); }
+  .pill.short { background: rgba(240,89,107,0.12); color: var(--short); }
+  .pill.watch { background: rgba(232,179,57,0.12); color: var(--watch); }
+  .pill.neutral { background: rgba(139,147,161,0.12); color: var(--text-dim); }
+
+  /* ---- Section heading ---- */
+  h2.section-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+    margin: 0 0 10px;
+    text-transform: none;
+  }
+
+  /* ---- Hero cards: Top Long / Top Short ---- */
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .hero-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-card.long { border-left: 3px solid var(--long); }
+  .hero-card.short { border-left: 3px solid var(--short); }
+  .hero-card .eyebrow { font-size: 11px; color: var(--text-faint); margin-bottom: 8px; }
+  .hero-card .row1 { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .hero-card .symbol { font-size: 22px; font-weight: 600; }
+  .hero-card .price-block { text-align: right; }
+  .hero-card .price { font-size: 18px; }
+  .hero-card .change { font-size: 13px; }
+  .hero-card .score-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .score-bar-track { flex: 1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 3px; }
+  .hero-card.long .score-bar-fill { background: var(--long); }
+  .hero-card.short .score-bar-fill { background: var(--short); }
+  .hero-card .score-val { font-size: 15px; font-weight: 600; min-width: 46px; text-align: right; }
+  .hero-card .explain { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+  .hero-card .meta-row { display: flex; gap: 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .hero-card .meta-item .label { font-size: 10.5px; color: var(--text-faint); }
+  .hero-card .meta-item .value { font-size: 13px; }
+
+  /* ---- Top 5 columns ---- */
+  .top5-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .top5-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .top5-col .col-head {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+  }
+  .top5-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .top5-row:last-child { border-bottom: none; }
+  .top5-row .left { display: flex; align-items: center; gap: 10px; }
+  .top5-row .rank { color: var(--text-faint); font-size: 12px; width: 14px; }
+  .top5-row .sym { font-weight: 500; }
+  .top5-row .right { display: flex; align-items: center; gap: 10px; }
+  .top5-row .chg { font-size: 12.5px; }
+  .top5-row .sc { font-size: 13px; font-weight: 600; min-width: 28px; text-align: right; }
+
+  /* ---- Main table ---- */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .filter-bar .chip {
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    background: var(--surface);
+    cursor: pointer;
+  }
+  .filter-bar .chip.active { border-color: var(--accent); color: var(--accent); background: rgba(76,141,255,0.08); }
+  .filter-bar .spacer { flex: 1; }
+  .filter-bar .view-toggle { display: flex; gap: 4px; }
+  .filter-bar .view-toggle button {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .filter-bar .view-toggle button.active { color: var(--text); border-color: var(--text-faint); }
+
+  table.ranking {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  table.ranking thead th {
+    text-align: right;
+    font-weight: 500;
+    color: var(--text-faint);
+    font-size: 11px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table.ranking thead th:first-child,
+  table.ranking thead th:nth-child(2) { text-align: left; }
+  table.ranking tbody td {
+    text-align: right;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table.ranking tbody td:first-child,
+  table.ranking tbody td:nth-child(2) { text-align: left; }
+  table.ranking tbody tr:last-child td { border-bottom: none; }
+  table.ranking tbody tr { cursor: pointer; }
+  table.ranking tbody tr:hover { background: var(--surface-2); }
+  table.ranking .symbol-cell { font-weight: 500; }
+  table.ranking .symbol-cell .exch { color: var(--text-faint); font-size: 10.5px; margin-left: 4px; }
+
+  .badge-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .badge-status.ready { background: rgba(61,214,140,0.12); color: var(--long); }
+  .badge-status.watch { background: rgba(232,179,57,0.12); color: var(--watch); }
+  .badge-status.none { background: rgba(139,147,161,0.08); color: var(--text-faint); }
+
+  .dir-arrow { font-size: 13px; }
+  .dir-arrow.long { color: var(--long); }
+  .dir-arrow.short { color: var(--short); }
+  .dir-arrow.none { color: var(--text-faint); }
+
+  footer.disclaimer {
+    margin: 20px 0 8px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* ---- Mobile compact list (shown only below 860px) ---- */
+  .mobile-list { display: none; }
+  .mobile-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .mobile-row:last-child { border-bottom: none; }
+  .mobile-row .m-left { display: flex; flex-direction: column; gap: 3px; }
+  .mobile-row .m-sym { font-size: 15px; font-weight: 500; }
+  .mobile-row .m-dir { font-size: 12px; }
+  .mobile-row .m-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .mobile-row .m-price { font-size: 15px; }
+  .mobile-row .m-sub { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+
+  /* ---- Responsive: mobile ---- */
+  @media (max-width: 860px) {
+    .status-bar { grid-template-columns: repeat(2, 1fr); }
+    .status-cell:last-child { grid-column: 1 / -1; }
+    .hero-grid { grid-template-columns: 1fr; }
+    .top5-grid { grid-template-columns: 1fr; }
+    table.ranking { display: none; }
+    .mobile-list {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">NIFTY 200 Opportunity Scanner<span>paper trading / analysis only</span></div>
+    <div class="clock" id="clock">27 Jan 2026, 12:04:37 IST</div>
+  </header>
+
+  <div class="status-bar">
+    <div class="status-cell">
+      <div class="label">Market status</div>
+      <div class="value"><span class="pill long">Open</span></div>
+    </div>
+    <div class="status-cell">
+      <div class="label">Direction</div>
+      <div class="value pos">Bullish</div>
+    </div>
+    <div class="status-cell">
+      <div class="label">Regime</div>
+      <div class="value">Trending</div>
+    </div>
+    <div class="status-cell">
+      <div class="label">NIFTY 200</div>
+      <div class="value num">13,842.15</div>
+    </div>
+    <div class="status-cell">
+      <div class="label">Change %</div>
+      <div class="value num pos">+0.62%</div>
+    </div>
+    <div class="status-cell">
+      <div class="label">VWAP</div>
+      <div class="value num">13,819.40</div>
+    </div>
+    <div class="status-cell">
+      <div class="label">Market strength</div>
+      <div class="value">ADX 27.4 <span style="color:var(--text-faint); font-weight:400;">moderate</span></div>
+    </div>
+  </div>
+
+  <h2 class="section-title">Top opportunities</h2>
+  <div class="hero-grid">
+    <div class="hero-card long">
+      <div class="eyebrow">Top long opportunity</div>
+      <div class="row1">
+        <div class="symbol">RELIANCE <span class="dir-arrow long">&#9650;</span></div>
+        <div class="price-block">
+          <div class="price num">2,948.60</div>
+          <div class="change num pos">+1.84%</div>
+        </div>
+      </div>
+      <div class="score-row">
+        <div class="score-bar-track"><div class="score-bar-fill" style="width:87%"></div></div>
+        <div class="score-val pos">87/100</div>
+      </div>
+      <div class="explain">LONG Opportunity Score: 87/100 (87%) — a measure of current Setup Quality and Signal Strength, not a probability of profit. Strongly confirmed: Trend, VWAP, EMA Structure, Breakout/Breakdown. Partially confirmed: Volume, Market Confirmation.</div>
+      <div class="meta-row">
+        <div class="meta-item"><div class="label">Entry</div><div class="value num">2,948.60</div></div>
+        <div class="meta-item"><div class="label">SL</div><div class="value num neg">2,905.10</div></div>
+        <div class="meta-item"><div class="label">Target</div><div class="value num pos">3,032.00</div></div>
+        <div class="meta-item"><div class="label">R:R</div><div class="value num">1.92</div></div>
+        <div class="meta-item"><div class="label">Status</div><div class="value"><span class="badge-status ready">Ready</span></div></div>
+      </div>
+    </div>
+
+    <div class="hero-card short">
+      <div class="eyebrow">Top short opportunity</div>
+      <div class="row1">
+        <div class="symbol">ZOMATO <span class="dir-arrow short">&#9660;</span></div>
+        <div class="price-block">
+          <div class="price num">261.35</div>
+          <div class="change num neg">-2.31%</div>
+        </div>
+      </div>
+      <div class="score-row">
+        <div class="score-bar-track"><div class="score-bar-fill" style="width:74%"></div></div>
+        <div class="score-val neg">74/100</div>
+      </div>
+      <div class="explain">SHORT Opportunity Score: 74/100 (74%) — a measure of current Setup Quality and Signal Strength, not a probability of profit. Strongly confirmed: Trend, Momentum. Partially confirmed: VWAP, Breakout/Breakdown, Market Confirmation.</div>
+      <div class="meta-row">
+        <div class="meta-item"><div class="label">Entry</div><div class="value num">261.35</div></div>
+        <div class="meta-item"><div class="label">SL</div><div class="value num pos">267.80</div></div>
+        <div class="meta-item"><div class="label">Target</div><div class="value num neg">248.90</div></div>
+        <div class="meta-item"><div class="label">R:R</div><div class="value num">1.93</div></div>
+        <div class="meta-item"><div class="label">Status</div><div class="value"><span class="badge-status watch">Watch</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section-title">Top 5</h2>
+  <div class="top5-grid">
+    <div class="top5-col">
+      <div class="col-head">Top 5 long</div>
+      <div id="top5-long"></div>
+    </div>
+    <div class="top5-col">
+      <div class="col-head">Top 5 short</div>
+      <div id="top5-short"></div>
+    </div>
+  </div>
+
+  <h2 class="section-title">Full ranking</h2>
+  <div class="filter-bar">
+    <div class="chip active">All</div>
+    <div class="chip">Long</div>
+    <div class="chip">Short</div>
+    <div class="chip">Ready</div>
+    <div class="chip">Watch</div>
+    <div class="chip">Score &gt; 60</div>
+    <div class="chip">R:R &gt; 2</div>
+    <div class="spacer"></div>
+    <div class="view-toggle">
+      <button class="active">Top 10</button>
+      <button>Top 50</button>
+      <button>Full 200</button>
+    </div>
+  </div>
+
+  <table class="ranking" id="ranking-table">
+    <thead>
+      <tr>
+        <th>Rank</th><th>Symbol</th><th>Price</th><th>Chg %</th><th>Volume</th><th>Rel Vol</th>
+        <th>VWAP</th><th>RSI</th><th>ADX</th><th>Trend</th><th>Dir</th><th>Score</th>
+        <th>Entry</th><th>SL</th><th>Target</th><th>R:R</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="ranking-body"></tbody>
+  </table>
+  <div class="mobile-list" id="ranking-mobile"></div>
+
+  <footer class="disclaimer">
+    This dashboard is for market analysis and paper trading. Opportunity Scores reflect currently
+    aligned technical conditions and configured thresholds — they are not a prediction of outcome
+    and are not validated by backtesting. Nothing here is a recommendation to buy or sell.
+  </footer>
+
+</div>
+
+<script>
+const rows = [
+  {rank:1, symbol:"RELIANCE", exch:"NSE", price:2948.60, chg:1.84, vol:"4.2M", relVol:2.4, vwap:2941.10, rsi:68.2, adx:31.5, trend:"18/20", dir:"long", score:87, entry:2948.60, sl:2905.10, target:3032.00, rr:1.92, status:"ready"},
+  {rank:2, symbol:"TATASTEEL", exch:"NSE", price:162.85, chg:2.41, vol:"18.6M", relVol:1.9, vwap:161.05, rsi:71.4, adx:28.9, trend:"16/20", dir:"long", score:81, entry:162.85, sl:159.40, target:169.20, rr:1.83, status:"ready"},
+  {rank:3, symbol:"ICICIBANK", exch:"NSE", price:1284.20, chg:1.12, vol:"7.8M", relVol:1.6, vwap:1279.90, rsi:63.7, adx:24.2, trend:"14/20", dir:"long", score:76, entry:1284.20, sl:1264.00, target:1318.50, rr:1.70, status:"watch"},
+  {rank:4, symbol:"ZOMATO", exch:"NSE", price:261.35, chg:-2.31, vol:"22.1M", relVol:2.1, vwap:263.80, rsi:29.6, adx:26.8, trend:"15/20", dir:"short", score:74, entry:261.35, sl:267.80, target:248.90, rr:1.93, status:"watch"},
+  {rank:5, symbol:"HDFCBANK", exch:"NSE", price:1698.75, chg:0.68, vol:"5.4M", relVol:1.3, vwap:1695.20, rsi:59.1, adx:19.4, trend:"11/20", dir:"long", score:62, entry:1698.75, sl:1678.00, target:1728.00, rr:1.41, status:"watch"},
+  {rank:6, symbol:"INFY", exch:"NSE", price:1842.10, chg:-0.94, vol:"6.1M", relVol:1.1, vwap:1846.50, rsi:38.4, adx:17.2, trend:"9/20", dir:"short", score:54, entry:1842.10, sl:1858.90, target:1814.60, rr:1.63, status:"none"},
+  {rank:7, symbol:"BAJFINANCE", exch:"NSE", price:7124.50, chg:0.21, vol:"1.2M", relVol:0.8, vwap:7118.90, rsi:52.0, adx:14.6, trend:"7/20", dir:"none", score:38, entry:7124.50, sl:null, target:null, rr:null, status:"none"},
+  {rank:8, symbol:"ADANIENT", exch:"NSE", price:2410.90, chg:-1.42, vol:"9.7M", relVol:1.7, vwap:2422.30, rsi:33.1, adx:22.5, trend:"12/20", dir:"short", score:58, entry:2410.90, sl:2448.00, target:2358.00, rr:1.43, status:"watch"},
+  {rank:9, symbol:"LT", exch:"NSE", price:3652.40, chg:0.55, vol:"2.9M", relVol:1.0, vwap:3648.70, rsi:56.3, adx:16.1, trend:"8/20", dir:"long", score:44, entry:3652.40, sl:null, target:null, rr:null, status:"none"},
+  {rank:10, symbol:"AXISBANK", exch:"NSE", price:1142.15, chg:0.33, vol:"4.0M", relVol:0.9, vwap:1140.80, rsi:54.8, adx:15.0, trend:"6/20", dir:"none", score:35, entry:1142.15, sl:null, target:null, rr:null, status:"none"},
+];
+
+function fmt(n, d) { return n === null || n === undefined ? "—" : Number(n).toLocaleString("en-IN", {minimumFractionDigits:d, maximumFractionDigits:d}); }
+function chgClass(v) { return v > 0 ? "pos" : v < 0 ? "neg" : ""; }
+function dirArrow(dir) {
+  if (dir === "long") return '<span class="dir-arrow long">&#9650; Long</span>';
+  if (dir === "short") return '<span class="dir-arrow short">&#9660; Short</span>';
+  return '<span class="dir-arrow none">— None</span>';
+}
+function statusBadge(s) {
+  if (s === "ready") return '<span class="badge-status ready">Ready</span>';
+  if (s === "watch") return '<span class="badge-status watch">Watch</span>';
+  return '<span class="badge-status none">None</span>';
+}
+
+const tbody = document.getElementById("ranking-body");
+rows.forEach(r => {
+  const tr = document.createElement("tr");
+  tr.onclick = () => alert("Would open detailed analysis page for " + r.symbol);
+  tr.innerHTML = `
+    <td data-label="Rank">${r.rank}</td>
+    <td data-label="Symbol" class="symbol-cell">${r.symbol}<span class="exch">${r.exch}</span></td>
+    <td data-label="Price" class="num">${fmt(r.price,2)}</td>
+    <td data-label="Chg %" class="num ${chgClass(r.chg)}">${r.chg>0?'+':''}${fmt(r.chg,2)}%</td>
+    <td data-label="Volume" class="num">${r.vol}</td>
+    <td data-label="Rel Vol" class="num">${fmt(r.relVol,1)}x</td>
+    <td data-label="VWAP" class="num">${fmt(r.vwap,2)}</td>
+    <td data-label="RSI" class="num">${fmt(r.rsi,1)}</td>
+    <td data-label="ADX" class="num">${fmt(r.adx,1)}</td>
+    <td data-label="Trend" class="num">${r.trend}</td>
+    <td data-label="Direction">${dirArrow(r.dir)}</td>
+    <td data-label="Score" class="num" style="font-weight:600;">${r.score}</td>
+    <td data-label="Entry" class="num">${fmt(r.entry,2)}</td>
+    <td data-label="SL" class="num">${fmt(r.sl,2)}</td>
+    <td data-label="Target" class="num">${fmt(r.target,2)}</td>
+    <td data-label="R:R" class="num">${r.rr ? fmt(r.rr,2) : "—"}</td>
+    <td data-label="Status">${statusBadge(r.status)}</td>
+  `;
+  tbody.appendChild(tr);
+});
+
+function top5(container, dir) {
+  const list = rows.filter(r => r.dir === dir).sort((a,b)=>b.score-a.score).slice(0,5);
+  const el = document.getElementById(container);
+  list.forEach(r => {
+    const div = document.createElement("div");
+    div.className = "top5-row";
+    div.innerHTML = `
+      <div class="left"><span class="rank">${r.rank}</span><span class="sym">${r.symbol}</span></div>
+      <div class="right">
+        <span class="chg num ${chgClass(r.chg)}">${r.chg>0?'+':''}${fmt(r.chg,2)}%</span>
+        <span class="sc num ${dir==='long'?'pos':'neg'}">${r.score}</span>
+      </div>`;
+    el.appendChild(div);
+  });
+}
+top5("top5-long", "long");
+top5("top5-short", "short");
+
+const mobileList = document.getElementById("ranking-mobile");
+rows.forEach(r => {
+  const div = document.createElement("div");
+  div.className = "mobile-row";
+  div.onclick = () => alert("Would open detailed analysis page for " + r.symbol);
+  const dirLabel = r.dir === "long" ? '<span class="dir-arrow long">&#9650; Long</span>'
+    : r.dir === "short" ? '<span class="dir-arrow short">&#9660; Short</span>'
+    : '<span class="dir-arrow none">— None</span>';
+  div.innerHTML = `
+    <div class="m-left">
+      <span class="m-sym">${r.symbol}</span>
+      <span class="m-dir">${dirLabel}</span>
+    </div>
+    <div class="m-right">
+      <span class="m-price num">${fmt(r.price,2)}</span>
+      <span class="m-sub">
+        <span class="num ${chgClass(r.chg)}">${r.chg>0?'+':''}${fmt(r.chg,2)}%</span>
+        <span class="num" style="font-weight:600;">${r.score}</span>
+        ${statusBadge(r.status)}
+      </span>
+    </div>
+  `;
+  mobileList.appendChild(div);
+});
+</script>
+</body>
+</html>

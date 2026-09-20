@@ -1,0 +1,27 @@
+[Unit]
+Description=NIFTY 200 Opportunity Scanner - backend API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=scanner
+Group=scanner
+WorkingDirectory=/opt/nifty200-scanner/backend
+# EnvironmentFile points at a file with real values, owned by root,
+# mode 600, readable only by the scanner user - NOT the .env.example
+# template. See deploy/DEPLOYMENT.md's Secret management section.
+EnvironmentFile=/etc/nifty200-scanner/backend.env
+ExecStart=/opt/nifty200-scanner/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/nifty200-scanner
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-bg text-text font-sans text-sm antialiased;
+  }
+}
+
+@layer utilities {
+  /* Tabular numerals for every price/score/indicator value - columns of
+     numbers must align like a real ticker, not drift with proportional
+     digit widths. */
+  .num {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums;
+  }
+}

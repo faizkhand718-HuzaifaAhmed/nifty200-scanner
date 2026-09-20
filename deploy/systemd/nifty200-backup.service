@@ -1,0 +1,8 @@
+[Unit]
+Description=Run the NIFTY 200 Opportunity Scanner database backup
+
+[Service]
+Type=oneshot
+User=scanner
+EnvironmentFile=/etc/nifty200-scanner/backend.env
+ExecStart=/opt/nifty200-scanner/deploy/backup.sh

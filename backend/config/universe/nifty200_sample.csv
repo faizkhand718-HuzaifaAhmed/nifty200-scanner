@@ -1,0 +1,13 @@
+symbol,exchange,company_name,sector,isin,instrument_token
+RELIANCE,NSE,Reliance Industries Ltd,Energy,,
+TCS,NSE,Tata Consultancy Services Ltd,Information Technology,,
+HDFCBANK,NSE,HDFC Bank Ltd,Financial Services,,
+INFY,NSE,Infosys Ltd,Information Technology,,
+ICICIBANK,NSE,ICICI Bank Ltd,Financial Services,,
+HINDUNILVR,NSE,Hindustan Unilever Ltd,Consumer Goods,,
+ITC,NSE,ITC Ltd,Consumer Goods,,
+SBIN,NSE,State Bank of India,Financial Services,,
+BHARTIARTL,NSE,Bharti Airtel Ltd,Telecommunications,,
+KOTAKBANK,NSE,Kotak Mahindra Bank Ltd,Financial Services,,
+LT,NSE,Larsen & Toubro Ltd,Construction,,
+AXISBANK,NSE,Axis Bank Ltd,Financial Services,,
