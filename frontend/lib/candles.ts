@@ -89,6 +89,13 @@ export interface TradePlanLevels {
 export interface ChartData {
   symbol: string;
   timeframe: Timeframe;
+  /** False when the backend genuinely has no data for this
+   * symbol/timeframe combination (e.g. an intraday timeframe against a
+   * data source that only provides daily bars) - the chart must show a
+   * clear "not available" message in this case, never an empty chart
+   * that looks broken or, worse, looks like real data with nothing in
+   * it. See app/api/services/chart_service.py's module docstring. */
+  available: boolean;
   candles: ChartCandle[];
   overlays: ChartOverlays;
   markers: SetupMarker[];

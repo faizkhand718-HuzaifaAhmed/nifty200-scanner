@@ -16,7 +16,12 @@ import { OverlayToggles, DEFAULT_VISIBLE_OVERLAYS } from "./OverlayToggles";
  * symbol in the URL.
  */
 export function ChartSection({ symbol }: { symbol: string }) {
-  const [timeframe, setTimeframe] = useState<Timeframe>("5m");
+  // "1d" is the default because it is, honestly, the only timeframe the
+  // real backend currently supports (NSE MCP provides daily bars only -
+  // see backend/app/api/services/chart_service.py's module docstring).
+  // Defaulting to an intraday timeframe would show "not available" on
+  // every first load, which is accurate but a poor first impression.
+  const [timeframe, setTimeframe] = useState<Timeframe>("1d");
   const [visibleOverlays, setVisibleOverlays] = useState<Set<OverlayKey>>(DEFAULT_VISIBLE_OVERLAYS);
   const [chartData, setChartData] = useState<ChartData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,8 +52,13 @@ export function ChartSection({ symbol }: { symbol: string }) {
             Loading chart…
           </div>
         )}
-        {chartData ? (
+        {chartData && chartData.candles.length > 0 ? (
           <CandlestickChart data={chartData} visibleOverlays={visibleOverlays} />
+        ) : chartData && !chartData.available ? (
+          <div className="h-[440px] flex items-center justify-center text-text-faint text-sm text-center px-6">
+            Intraday data isn&apos;t available for this symbol yet - the connected data source
+            only provides daily bars. Try the &quot;Daily&quot; timeframe instead.
+          </div>
         ) : (
           <div className="h-[440px]" />
         )}

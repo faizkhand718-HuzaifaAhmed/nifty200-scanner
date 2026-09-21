@@ -42,7 +42,12 @@ export interface MarketStatusSummary {
   indexName: string;
   price: number;
   changePct: number;
-  vwap: number;
+  /** NSE MCP's data (daily bars + a live snapshot quote) has no intraday
+   * session, so VWAP - inherently a same-session, minute-by-minute
+   * concept - cannot be honestly computed. Null, always, until a data
+   * source with real intraday candles is wired in - never a fabricated
+   * number. formatPrice() already renders null as "—". */
+  vwap: number | null;
   /** Derived from NIFTY's own EMA20-vs-EMA50 (see setup_detection conditions). */
   direction: "Bullish" | "Bearish" | "Neutral";
   /** Derived label, e.g. "Trending" / "Ranging" - not yet a backend field;

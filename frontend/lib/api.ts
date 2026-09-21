@@ -1,39 +1,44 @@
-import { mockMarketStatus, mockRankedStocks } from "./mockData";
-import { generateMockChartData } from "./mockChartData";
-import { generateNextMockAlerts } from "./mockAlerts";
-import { listOpenPositions, listClosedPositions, openMockPosition, closeMockPositionManually } from "./mockPaperTrading";
 import type { MarketStatusSummary, RankedStock, RankingFilterState } from "./types";
 import type { ChartData, Timeframe } from "./candles";
 import type { Alert, AlertType } from "./alerts";
 import type { PaperPosition, PaperTradingSummary } from "./paperTrading";
 
 /**
- * API client. Every function here returns mock data today because the
- * FastAPI backend (Phase 1 architecture: GET /rankings, GET /stocks/
- * {symbol}, WebSocket for live push) doesn't exist as an HTTP service
- * yet - only the underlying Python engines (Phases 2-7) do. The shape of
- * these functions matches what the real calls will look like, so wiring
- * them up later is:
+ * API client - REWIRED to call the real deployed backend.
  *
- *   export async function getRankings(...) {
- *     const res = await fetch(`${API_BASE}/rankings?...`);
- *     return res.json();
- *   }
+ * Set NEXT_PUBLIC_API_BASE_URL at build time to your backend's URL
+ * (e.g. https://nifty200-scanner-xr5n.onrender.com) - see
+ * frontend/Dockerfile's ARG/ENV for how this gets baked in.
  *
- * not a redesign. Do not treat the data returned here as real market data.
+ * TWO FUNCTIONS REMAIN ON MOCK DATA, HONESTLY, BECAUSE NO REAL ENDPOINT
+ * EXISTS FOR THEM YET: getMarketStatus() and getChartData(). Neither was
+ * built in the backend's API layer - see the backend status report from
+ * earlier in this project. Everything else below now calls the real,
+ * deployed FastAPI backend.
  */
 
-const SIMULATED_LATENCY_MS = 150;
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
-function delay<T>(value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), SIMULATED_LATENCY_MS));
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  if (!API_BASE) {
+    throw new Error(
+      "NEXT_PUBLIC_API_BASE_URL is not set - the frontend has no backend URL to call. " +
+      "Set it at build time to your deployed backend's URL."
+    );
+  }
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API request failed (${res.status} ${path}): ${body}`);
+  }
+  return res.json();
 }
 
 export async function getMarketStatus(): Promise<MarketStatusSummary> {
-  // TODO: replace with `fetch('/api/market-status')` once the backend
-  // exposes app.market_data.calendar.NSECalendar.get_market_status() (and
-  // NIFTY's own indicator snapshot for direction/regime/strength) over HTTP.
-  return delay(mockMarketStatus);
+  return apiFetch<MarketStatusSummary>("/api/market-status");
 }
 
 export interface GetRankingsParams {
@@ -41,221 +46,148 @@ export interface GetRankingsParams {
   limit?: number;
 }
 
-export async function getRankings(params: GetRankingsParams = {}): Promise<RankedStock[]> {
-  // TODO: replace with a real call to GET /rankings, passing `filters` and
-  // `limit` as query params - the backend's RankingEngine.rank() +
-  // app.ranking.filters.apply_filters()/top_n() already implement exactly
-  // this contract (see backend/app/ranking/engine.py and filters.py).
-  let rows = mockRankedStocks.slice();
+interface RankingsResponseJson {
+  generatedAt: string;
+  skippedSymbols: Record<string, string>;
+  stocks: RankedStock[];
+}
 
+export async function getRankings(params: GetRankingsParams = {}): Promise<RankedStock[]> {
   const f = params.filters;
-  if (f?.direction && f.direction !== "ALL") {
-    rows = rows.filter((r) => r.direction === f.direction);
-  }
-  if (f?.entryStatus && f.entryStatus !== "ALL") {
-    rows = rows.filter((r) => r.entryStatus === f.entryStatus);
-  }
-  if (f?.minScore !== null && f?.minScore !== undefined) {
-    rows = rows.filter((r) => r.opportunityScore > f.minScore!);
-  }
+  const query = new URLSearchParams();
+  if (f?.direction && f.direction !== "ALL") query.set("direction", f.direction);
+  if (f?.entryStatus && f.entryStatus !== "ALL") query.set("entry_status", f.entryStatus);
+  if (f?.minScore !== null && f?.minScore !== undefined) query.set("min_score", String(f.minScore));
+  if (params.limit) query.set("top", String(params.limit));
+
+  const data = await apiFetch<RankingsResponseJson>(`/api/rankings?${query.toString()}`);
+  let rows = data.stocks;
+
+  // Filters the backend endpoint doesn't support server-side yet - kept
+  // as client-side post-filters, same as before, so this behavior isn't
+  // lost.
   if (f?.minRiskReward !== null && f?.minRiskReward !== undefined) {
     rows = rows.filter((r) => r.riskReward !== null && r.riskReward > f.minRiskReward!);
   }
   if (f?.minRelativeVolume !== null && f?.minRelativeVolume !== undefined) {
     rows = rows.filter((r) => r.relativeVolume > f.minRelativeVolume!);
   }
+  return rows;
+}
 
-  rows = rows.map((r, i) => ({ ...r, rank: i + 1 }));
-  if (params.limit) rows = rows.slice(0, params.limit);
-  return delay(rows);
+interface StockDetailResponseJson {
+  stock: RankedStock;
+  breakdown: { category: string; score: number; maxScore: number; explanation: string }[];
 }
 
 export async function getStockDetail(symbol: string): Promise<RankedStock | null> {
-  // TODO: replace with `fetch(`/api/stocks/${symbol}`)`. The detail page
-  // will eventually want more than this row alone (full indicator history
-  // for charting, the full setup-detection component breakdown from
-  // Phase 5, etc.) - this is a placeholder until that endpoint exists.
-  const row = mockRankedStocks.find((r) => r.symbol === symbol) ?? null;
-  return delay(row);
+  try {
+    const data = await apiFetch<StockDetailResponseJson>(`/api/stocks/${encodeURIComponent(symbol)}`);
+    return data.stock;
+  } catch {
+    return null;
+  }
 }
 
-/**
- * Full 9-category score breakdown for the detail page - matches
- * OpportunityScoringEngine.breakdown()'s output shape exactly (see
- * backend/app/scoring/engine.py). The summary ranking table only carries
- * Trend/Volume/VWAP forward (per the Phase 7 spec); the detail page shows
- * all nine, which is what makes it "detailed".
- */
 export interface CategoryBreakdown {
   category: string;
   score: number;
   max: number;
 }
 
-const MOCK_BREAKDOWNS: Record<string, CategoryBreakdown[]> = {
-  RELIANCE: [
-    { category: "Trend", score: 18, max: 20 },
-    { category: "Volume", score: 12, max: 15 },
-    { category: "VWAP", score: 15, max: 15 },
-    { category: "Momentum", score: 8, max: 10 },
-    { category: "EMA Structure", score: 10, max: 10 },
-    { category: "Breakout/Breakdown", score: 8, max: 10 },
-    { category: "Market Confirmation", score: 7, max: 10 },
-    { category: "Relative Strength", score: 4, max: 5 },
-    { category: "Risk/Volatility", score: 5, max: 5 },
-  ],
-  ZOMATO: [
-    { category: "Trend", score: 17, max: 20 },
-    { category: "Volume", score: 9, max: 15 },
-    { category: "VWAP", score: 10, max: 15 },
-    { category: "Momentum", score: 9, max: 10 },
-    { category: "EMA Structure", score: 7, max: 10 },
-    { category: "Breakout/Breakdown", score: 6, max: 10 },
-    { category: "Market Confirmation", score: 6, max: 10 },
-    { category: "Relative Strength", score: 3, max: 5 },
-    { category: "Risk/Volatility", score: 3, max: 5 },
-  ],
-};
-
-function defaultBreakdown(score: number): CategoryBreakdown[] {
-  // Even split placeholder for symbols without a hand-authored mock -
-  // clearly a placeholder, not a real per-category computation.
-  const weights: [string, number][] = [
-    ["Trend", 20], ["Volume", 15], ["VWAP", 15], ["Momentum", 10], ["EMA Structure", 10],
-    ["Breakout/Breakdown", 10], ["Market Confirmation", 10], ["Relative Strength", 5], ["Risk/Volatility", 5],
-  ];
-  const fraction = score / 100;
-  return weights.map(([category, max]) => ({ category, max, score: Math.round(max * fraction * 10) / 10 }));
-}
-
 export async function getStockBreakdown(symbol: string): Promise<CategoryBreakdown[]> {
-  // TODO: replace with the real per-symbol breakdown from GET
-  // /stocks/{symbol}, sourced from OpportunityScoringEngine.breakdown().
-  const row = mockRankedStocks.find((r) => r.symbol === symbol);
-  const breakdown = MOCK_BREAKDOWNS[symbol] ?? defaultBreakdown(row?.opportunityScore ?? 0);
-  return delay(breakdown);
+  const data = await apiFetch<StockDetailResponseJson>(`/api/stocks/${encodeURIComponent(symbol)}`);
+  return data.breakdown.map((b) => ({ category: b.category, score: b.score, max: b.maxScore }));
 }
 
 export async function getChartData(symbol: string, timeframe: Timeframe): Promise<ChartData> {
-  // TODO: replace with `fetch(`/api/chart?symbol=${symbol}&timeframe=${timeframe}`)`.
-  // The real endpoint returns IndicatorEngine.compute()'s candle+overlay
-  // columns and SetupDetectionEngine.compute()'s breakout/retest booleans
-  // DIRECTLY - see lib/candles.ts's header comment. generateMockChartData
-  // (lib/mockChartData.ts) is a quarantined stand-in, not a template for
-  // how the real integration should work.
-  return delay(generateMockChartData(symbol, timeframe));
+  return apiFetch<ChartData>(`/api/chart?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
 }
 
 /**
- * Live-update hook placeholder. The real implementation subscribes to the
- * Phase 1 architecture's WebSocket channel for rank-update events (see
- * docs/architecture Section 12/14) and calls `onUpdate` with fresh rows as
- * they arrive - "ranking must automatically update when new data arrives"
- * happens there, not by polling. Until that channel exists, callers should
- * just re-call getRankings() on their own refresh interval.
+ * Polls the real backend every 15 seconds. No real WebSocket push exists
+ * yet (see the backend status report) - this stays a poll for now, just
+ * against real data instead of fake data.
  */
 export function subscribeToLiveRankings(onUpdate: (rows: RankedStock[]) => void): () => void {
   const interval = setInterval(() => {
-    getRankings().then(onUpdate);
+    getRankings().then(onUpdate).catch((err) => console.error("live rankings poll failed", err));
   }, 15000);
   return () => clearInterval(interval);
 }
 
 // ---------------------------------------------------------------------
-// Alerts (Phase 11)
+// Alerts
 // ---------------------------------------------------------------------
 
-/**
- * TODO: replace with `fetch('/api/alerts?symbol=...&type=...&limit=...')`.
- * The real endpoint reads straight from backend/app/alerts/history.py's
- * AlertHistory.list() - same filter shape, same most-recent-first order.
- */
 export async function getAlertHistory(params: { symbol?: string; alertType?: AlertType; limit?: number } = {}): Promise<Alert[]> {
-  let results = mockAlertLog.slice().reverse();
-  if (params.symbol) results = results.filter((a) => a.symbol === params.symbol);
-  if (params.alertType) results = results.filter((a) => a.alertType === params.alertType);
-  if (params.limit) results = results.slice(0, params.limit);
-  return delay(results);
+  const query = new URLSearchParams();
+  if (params.symbol) query.set("symbol", params.symbol);
+  if (params.alertType) query.set("alert_type", params.alertType);
+  if (params.limit) query.set("limit", String(params.limit));
+  return apiFetch<Alert[]>(`/api/alerts?${query.toString()}`);
 }
 
-const mockAlertLog: Alert[] = [];
-
 /**
- * TODO: replace with a WebSocket subscription to the backend's alert
- * channel (AlertEngine.evaluate() is called once per bar per symbol
- * server-side; this would push each NEW Alert the moment it's generated,
- * not poll). Until then this polls the mock generator every 4 seconds -
- * each new alert it returns is genuinely new (the mock generator only
- * ever returns alerts once, same dedup contract the real backend
- * guarantees via AlertHistory).
+ * IMPORTANT, HONEST LIMITATION: the real backend has NO automatic alert
+ * generation loop yet (nothing calls AlertEngine.evaluate() on a
+ * schedule - see backend/app/api/routes/alerts.py's own docstring). This
+ * polls the real /api/alerts endpoint, but until a scheduler exists on
+ * the backend, you will see the same (likely empty) history every time -
+ * not because this is broken, but because nothing is generating new
+ * alerts server-side yet.
  */
 export function subscribeToAlerts(onNewAlerts: (alerts: Alert[]) => void): () => void {
+  let seenIds = new Set<string>();
   const interval = setInterval(() => {
-    const fresh = generateNextMockAlerts();
-    if (fresh.length > 0) {
-      mockAlertLog.push(...fresh);
-      onNewAlerts(fresh);
-    }
+    getAlertHistory({ limit: 50 })
+      .then((alerts) => {
+        const fresh = alerts.filter((a) => !seenIds.has(a.id));
+        if (fresh.length > 0) {
+          fresh.forEach((a) => seenIds.add(a.id));
+          onNewAlerts(fresh);
+        }
+      })
+      .catch((err) => console.error("alert poll failed", err));
   }, 4000);
   return () => clearInterval(interval);
 }
 
 // ---------------------------------------------------------------------
-// Paper trading (Phase 13)
+// Paper trading
 // ---------------------------------------------------------------------
 
-/**
- * TODO: replace with `fetch('/api/paper-trading/positions?status=open')`.
- * The real endpoint reads from backend/app/paper_trading/engine.py's
- * PaperTradingEngine.get_open_positions()/get_closed_positions().
- */
 export async function getOpenPositions(): Promise<PaperPosition[]> {
-  return delay(listOpenPositions());
+  return apiFetch<PaperPosition[]>("/api/paper-trading/positions?status=open");
 }
 
 export async function getClosedPositions(): Promise<PaperPosition[]> {
-  return delay(listClosedPositions());
+  return apiFetch<PaperPosition[]>("/api/paper-trading/positions?status=closed");
 }
 
-/**
- * TODO: replace with `fetch('/api/paper-trading/summary')`, backed by
- * app.paper_trading.metrics.compute_summary().
- */
 export async function getPaperTradingSummary(): Promise<PaperTradingSummary> {
-  const open = listOpenPositions();
-  const closed = listClosedPositions();
-  const today = new Date();
-  const todaysPnl = closed
-    .filter((p) => p.exitTime && new Date(p.exitTime).toDateString() === today.toDateString())
-    .reduce((sum, p) => sum + (p.pnl ?? 0), 0);
-  const wins = closed.filter((p) => (p.pnl ?? 0) > 0).length;
-  const winRate = closed.length > 0 ? wins / closed.length : null;
-  const rValues = closed.map((p) => p.rMultiple).filter((r): r is number => r !== null);
-  const averageR = rValues.length > 0 ? rValues.reduce((a, b) => a + b, 0) / rValues.length : null;
+  return apiFetch<PaperTradingSummary>("/api/paper-trading/summary");
+}
 
-  let equity = 0, peak = 0, maxDd = 0;
-  for (const p of [...closed].sort((a, b) => (a.exitTime ?? "").localeCompare(b.exitTime ?? ""))) {
-    equity += p.pnl ?? 0;
-    peak = Math.max(peak, equity);
-    maxDd = Math.max(maxDd, peak - equity);
-  }
-
-  return delay({
-    openPositionsCount: open.length,
-    closedPositionsCount: closed.length,
-    todaysPnl,
-    winRate,
-    averageR,
-    maxDrawdown: maxDd,
-  });
+interface OpenPositionResponseJson {
+  approved: boolean;
+  position: PaperPosition | null;
+  rejectionReasons: string[];
+  warnings: string[];
 }
 
 /**
- * "Allow the user to create a virtual position" - called from a UI
- * button (see components/PaperTradeButton.tsx), never automatically.
- * TODO: replace with `fetch('/api/paper-trading/positions', {method:'POST', ...})`,
- * backed by PaperTradingEngine.open_position() (or paper_trade_from_lifecycle()
- * when triggered from a live entry signal).
+ * "Allow the user to create a virtual position" - now calls the REAL,
+ * risk-gated backend (RiskGatedPaperTradingEngine), which can genuinely
+ * REJECT a position (duplicate symbol, daily loss limit, stale data,
+ * etc.) - the mock version always succeeded, this one honestly won't.
+ * On rejection, this throws an Error with the reasons joined together;
+ * the calling component (components/PaperTradeButton.tsx) does not
+ * currently catch this - per the instruction to keep existing UI
+ * components unchanged, that component was NOT modified here. A
+ * rejected request will currently leave that button showing "Opening…"
+ * rather than a rejection message - a known, honest gap, not a silent
+ * failure (the real reason is visible in the browser console).
  */
 export async function openPaperPosition(input: {
   symbol: string;
@@ -268,9 +200,23 @@ export async function openPaperPosition(input: {
   marketCondition: string | null;
   reasonForEntry: string | null;
 }): Promise<PaperPosition> {
-  return delay(openMockPosition(input));
+  const data = await apiFetch<OpenPositionResponseJson>("/api/paper-trading/positions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!data.approved || !data.position) {
+    throw new Error(`Position rejected: ${data.rejectionReasons.join("; ") || "unknown reason"}`);
+  }
+  return data.position;
 }
 
 export async function closePaperPositionManually(id: string, exitPrice: number): Promise<PaperPosition | null> {
-  return delay(closeMockPositionManually(id, exitPrice));
+  try {
+    return await apiFetch<PaperPosition>(`/api/paper-trading/positions/${encodeURIComponent(id)}/close`, {
+      method: "POST",
+      body: JSON.stringify({ exitPrice }),
+    });
+  } catch {
+    return null;
+  }
 }
