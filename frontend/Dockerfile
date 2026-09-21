@@ -2,7 +2,13 @@
 FROM node:20-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci
+# npm ci requires a committed package-lock.json, which this project does
+# not have (generating one correctly requires resolving the real
+# dependency tree against npm's registry - not possible from the
+# environment this was built in, which has no network access). npm
+# install works with or without a lock file, resolving here instead,
+# inside Render's build environment which does have real network access.
+RUN npm install
 
 FROM node:20-slim AS builder
 WORKDIR /app
